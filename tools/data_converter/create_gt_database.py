@@ -12,6 +12,7 @@ from pycocotools.coco import COCO
 from mmdet3d.core.bbox import box_np_ops as box_np_ops
 from mmdet3d.datasets import build_dataset
 from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
+from tools.data_converter import spa_nus_converter as spa_nus_converter
 
 
 def _poly2mask(mask_ann, img_h, img_w):
@@ -240,6 +241,46 @@ def create_groundtruth_database(dataset_class_name,
                     with_label_3d=True,
                     file_client_args=file_client_args)
             ])
+    
+    elif dataset_class_name == 'SPA_MVX_Dataset':
+        file_client_args = dict(backend='disk')
+        dataset_cfg.update(
+            test_mode=False,
+            split='training',
+            modality=dict(
+                use_lidar=True,
+                use_depth=False,
+                use_lidar_intensity=True,
+                use_camera=with_mask,
+            ),
+            pipeline=[
+                dict(
+                    type='LoadPointsFromFile',
+                    coord_type='LIDAR',
+                    load_dim=4,
+                    use_dim=4,
+                    file_client_args=file_client_args),
+                dict(
+                    type='LoadAnnotations3D',
+                    with_bbox_3d=True,
+                    with_label_3d=True,
+                    file_client_args=file_client_args)
+            ])
+    
+    elif dataset_class_name == 'SPA_Nus_Dataset':
+        dataset_cfg.update(
+            use_valid_flag=True,
+            pipeline=[
+                dict(
+                    type='LoadPointsFromFile',
+                    coord_type='LIDAR',
+                    load_dim=4,
+                    use_dim=4),
+                dict(
+                    type='LoadAnnotations3D',
+                    with_bbox_3d=True,
+                    with_label_3d=True)
+            ])
 
     dataset = build_dataset(dataset_cfg)
 
@@ -278,7 +319,14 @@ def create_groundtruth_database(dataset_class_name,
             difficulty = annos['difficulty']
 
         num_obj = gt_boxes_3d.shape[0]
-        point_indices = box_np_ops.points_in_rbbox(points, gt_boxes_3d)
+
+        gt_boxes_corners = spa_nus_converter.box_center_to_corner_3d(gt_boxes_3d[:, :3], gt_boxes_3d[:, 3:6], gt_boxes_3d[:, 6])
+        num_pts_list = spa_nus_converter.get_pts_index_in_3dbox_(points, gt_boxes_corners)
+        # point_indices = box_np_ops.points_in_rbbox(points, gt_boxes_3d)
+        if np.array(num_pts_list).shape[0] != 0:
+            point_indices = np.array(num_pts_list).transpose(1, 0)
+        else:
+            point_indices = np.full((points.shape[0]), False)
 
         if with_mask:
             # prepare masks

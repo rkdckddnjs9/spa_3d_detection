@@ -94,10 +94,17 @@ class _NumPointsInGTCalculater:
         dims = annos['dimensions'][:num_obj]
         loc = annos['location'][:num_obj]
         rots = annos['rotation_y'][:num_obj]
-        gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]],
+
+        # kitti는 camera coord annotation이라서 lidar좌표계로 역변환 해주는 과정인데,
+        # 우리는 lidar coord annotation이라서 그대로 사용하면 될듯 함
+        # gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]],
+        #                                  axis=1)
+        # gt_boxes_lidar = box_np_ops_spa.box_camera_to_lidar(
+        #     gt_boxes_camera, rect, Trv2c)
+        
+        gt_boxes_lidar = np.concatenate([loc, dims, rots[..., np.newaxis]],
                                          axis=1)
-        gt_boxes_lidar = box_np_ops_spa.box_camera_to_lidar(
-            gt_boxes_camera, rect, Trv2c)
+                                         
         indices = box_np_ops_spa.points_in_rbbox(points_v[:, :3], gt_boxes_lidar)
         num_points_in_gt = indices.sum(0)
         num_ignored = len(annos['dimensions']) - num_obj
@@ -135,6 +142,7 @@ def _calculate_num_points_in_gt(data_path,
         P_list = [calib['P0'], calib['P1'], calib['P2'], calib['P3'], calib['P4']]
         Tr_list = [calib['Tr_0'], calib['Tr_1'], calib['Tr_2'], calib['Tr_3'], calib['Tr_4']]
         if remove_outside:
+            # 360degree 라서 outside가 ㅇ벗음
             pass
             # points_v__ = []
             # for ii, P in enumerate(P_list):
@@ -156,12 +164,20 @@ def _calculate_num_points_in_gt(data_path,
         loc = annos['location'][:num_obj]
         rots = annos['rotation_y'][:num_obj]
 
-        x_ = loc[:, 2].reshape(-1,1)
-        y_ = -loc[:, 0].reshape(-1,1)
-        z_ = -loc[:, 1].reshape(-1,1)
+        # x_ = loc[:, 2].reshape(-1,1)
+        # y_ = -loc[:, 0].reshape(-1,1)
+        # z_ = -loc[:, 1].reshape(-1,1)
+
+        #for lidar coordinate
+        x_ = loc[:, 0].reshape(-1,1)
+        y_ = loc[:, 1].reshape(-1,1)
+        z_ = loc[:, 2].reshape(-1,1)
         loc = np.concatenate([x_,y_,z_], 1)
         dims = dims[:, [2, 1, 0]] # hwl ==> dxdydz(lwh)
-        rots_ = -rots+np.pi/2
+
+        #rots_ = -rots+np.pi/2
+        #for spadata
+        rots_ = rots
 
         gt_boxes_lidar = np.concatenate([loc, dims, rots_[..., np.newaxis]],
                                          axis=1)
@@ -535,32 +551,37 @@ def get_2d_boxes(info, occluded, mono3d=True):
     for ann_idx, ann_rec in enumerate(ann_recs):
         # Augment sample_annotation with token information.
         ann_rec['sample_annotation_token'] = \
-            f"{info['image']['image_idx']}.{ann_idx}"
-        ann_rec['sample_data_token'] = info['image']['image_idx']
-        sample_data_token = info['image']['image_idx']
+            f"{info['image']['image_idx'][0]}.{ann_idx}"
+        ann_rec['sample_data_token'] = info['image']['image_idx'][0]
+        sample_data_token = info['image']['image_idx'][0]
 
         loc = ann_rec['location'][np.newaxis, :]
-        dim = ann_rec['dimensions'][np.newaxis, :]
+        dim = ann_rec['dimensions'][np.newaxis, :][:,[1,2,0]]
         rot = ann_rec['rotation_y'][np.newaxis, np.newaxis]
         # transform the center from [0.5, 1.0, 0.5] to [0.5, 0.5, 0.5]
-        dst = np.array([0.5, 0.5, 0.5])
-        src = np.array([0.5, 1.0, 0.5])
-        loc = loc + dim * (dst - src)
-        # offset = (info['calib']['P2'][0, 3] - info['calib']['P0'][0, 3]) \
-        #     / info['calib']['P2'][0, 0]
+        # dst = np.array([0.5, 0.5, 0.5])
+        # src = np.array([0.5, 1.0, 0.5])
+        # loc = loc + dim * (dst - src)
+
         loc_3d = np.copy(loc)
         #loc_3d[0, 0] += offset
         gt_bbox_3d = np.concatenate([loc, dim, rot], axis=1).astype(np.float32)
 
         # Filter out the corners that are not in front of the calibrated
         # sensor.
+        # corners_3d = box_np_ops_spa.center_to_corner_box3d(
+        #     gt_bbox_3d[:, :3],
+        #     gt_bbox_3d[:, 3:6],
+        #     gt_bbox_3d[:, 6], [0.5, 0.5, 0.5],
+        #     axis=1)
         corners_3d = box_np_ops_spa.center_to_corner_box3d(
             gt_bbox_3d[:, :3],
             gt_bbox_3d[:, 3:6],
-            gt_bbox_3d[:, 6], [0.5, 0.5, 0.5],
-            axis=1)
+            gt_bbox_3d[:, 6], [0.0, 0.0, 0.0],
+            axis=2)
         corners_3d = corners_3d[0].T  # (1, 8, 3) -> (3, 8)
-        in_front = np.argwhere(corners_3d[2, :] > 0).flatten()
+
+        in_front = np.argwhere(corners_3d[2, :] > 0).flatten() # ori : np.argwhere(corners_3d[2, :] > 0).flatten()
         corners_3d = corners_3d[:, in_front]
 
         # Project 3d box to 2d.
@@ -569,10 +590,19 @@ def get_2d_boxes(info, occluded, mono3d=True):
         
         all_corner_coords = []
         for calib_ in calib_list:
-            corner_coords = view_points(corners_3d, calib_,
-                                        True).T[:, :2].tolist()
-            # all_corner_coords.append(np.dot(calib_[:3, :3], corners_3d).T[:,:2].tolist())
-            all_corner_coords.append(corner_coords)
+            # corner_coords = view_points(corners_3d, calib_,
+            #                             True).T[:, :2].tolist()
+            #all_corner_coords.append(corner_coords)
+
+            all_corner_coords.append((np.dot(calib_[:3, :3], corners_3d).T+calib_[:3, 3])[:,:2].tolist())
+
+            # mask_x = (np.array(corner_coords)[:,0]>0)
+            # mask_y = (np.array(corner_coords)[:,1]>0)
+            # mask = mask_x * mask_y
+            # corner_coords = list(np.array(corner_coords)[mask])
+            # if len(corner_coords) == 0:
+            #     continue
+        
 
         # Keep only corners that fall within the image.
         final_coords = []

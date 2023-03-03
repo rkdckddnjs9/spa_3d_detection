@@ -9,6 +9,8 @@ from .lyft_dataset import LyftDataset
 from .nuscenes_dataset import NuScenesDataset
 from .nuscenes_mono_dataset import NuScenesMonoDataset
 from .spa_dataset import SPADataset
+from .spa_mvx_dataset import SPA_MVX_Dataset
+from .spa_nus_dataset import SPA_Nus_Dataset
 # yapf: disable
 from .pipelines import (AffineResize, BackgroundPointsFilter, GlobalAlignment,
                         GlobalRotScaleTrans, IndoorPatchPointSample,
@@ -45,5 +47,5 @@ __all__ = [
     'RandomJitterPoints', 'ObjectNameFilter', 'AffineResize',
     'RandomShiftScale', 'LoadPointsFromDict', 'PIPELINES',
     'RangeLimitedRandomCrop', 'RandomRotate', 'MultiViewWrapper',
-    'SPADataset',
+    'SPADataset', 'SPA_MVX_Dataset', "SPA_Nus_Dataset"
 ]

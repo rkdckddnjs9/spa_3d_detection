@@ -239,12 +239,47 @@ def center_to_corner_box3d(centers,
     # 'length' in kitti format is in x axis.
     # yzx(hwl)(kitti label file)<->xyz(lhw)(camera)<->z(-x)(-y)(lwh)(lidar)
     # center in kitti format is [0.5, 1.0, 0.5] in xyz.
-    corners = corners_nd(dims, origin=origin)
-    # corners: [N, 8, 3]
-    if angles is not None:
-        corners = rotation_3d_in_axis(corners, angles, axis=axis)
-    corners += centers.reshape([-1, 1, 3])
+    #corners = corners_nd(dims, origin=origin)
+    corners = box_center_to_corner_3d(centers, dims, angles)
+    # corners = corners_nd(dims, origin=[0.0, 0.0, 0.0])
+
+    # # corners: [N, 8, 3]
+    # if angles is not None:
+    #     # corners = rotation_3d_in_axis(corners, angles, axis=axis)
+    #     corners = rotation_3d_in_axis(corners, angles, axis=axis)
+    # corners += centers.reshape([-1, 1, 3])
     return corners
+
+def box_center_to_corner_3d(centers, dims, angles):
+
+    translation = centers[:, 0:3]
+    h, w, l = dims[:, 0], dims[:, 1], dims[:, 2]
+    rotation = angles + np.pi/2
+
+    # Create a bounding box outline
+    x_corners = np.array([[l_ / 2, l_ / 2, -l_ / 2, -l_ / 2, l_ / 2, l_ / 2, -l_ / 2, -l_ / 2] for l_ in l])
+    #[[l_ / 2, l_ / 2, -l_ / 2, -l_ / 2, l_ / 2, l_ / 2, -l_ / 2, -l_ / 2] for l_ in l]
+    y_corners = np.array([[w_ / 2, w_ / 2, -w_ / 2, -w_ / 2, w_ / 2, w_ / 2, -w_ / 2, -w_ / 2] for w_ in w])
+    #[w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2]
+    z_corners = np.array([[h_ / 2, h_ / 2, -h_ / 2, -h_ / 2, h_ / 2, h_ / 2, -h_ / 2, -h_ / 2] for h_ in h])
+    #[-h/2, -h/2, -h/2, -h/2, h/2, h/2, h/2, h/2] #[0, 0, 0, 0, -h, -h, -h, -h]
+    bounding_box = np.array([np.vstack([x_corners[i], y_corners[i], z_corners[i]]) for i in range(x_corners.shape[0])])
+
+
+    # rotation_matrix = np.array([[np.cos(rotation),  0,  np.sin(rotation)],
+    #                      [0,  1,  0],
+    #                      [-np.sin(rotation), 0,  np.cos(rotation)]])
+    rotation_matrix = np.array([np.array([[np.cos(rotation_),  -np.sin(rotation_), 0],
+                                            [np.sin(rotation_), np.cos(rotation_), 0],
+                                            [0,  0,  1]]) for rotation_ in rotation])
+
+
+    corner_box = np.array([np.dot(rotation_matrix[i], bounding_box[i]).T + translation[i] for i in range(x_corners.shape[0])])
+    # corner_box = corner_box[:, [2, 0, 1]] * np.array([[1, -1, -1]])
+    #corner_box = corner_box[:, [2, 0, 1]] * np.array([[1, -1, -1]])
+
+    # return corner_box.transpose()
+    return corner_box
 
 
 @numba.jit(nopython=True)

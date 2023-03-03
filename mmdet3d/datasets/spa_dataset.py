@@ -131,10 +131,12 @@ class SPADataset(Custom3DDataset):
             lidar2img_rt = info['calib']['P{}'.format(idx)]
             lidar2img_rts.append(lidar2img_rt)
 
+
         input_dict.update(
             dict(
-                img_filename=image_paths,
                 lidar2img=lidar2img_rts,
+                img_prefix=None,
+                img_info=dict(filename=image_paths),
             )
         )
 
@@ -193,12 +195,15 @@ class SPADataset(Custom3DDataset):
         dims = annos['dimensions']
         rots = annos['rotation_y']
         gt_names = annos['name']
-        gt_bboxes_3d = np.concatenate([loc, dims, rots[..., np.newaxis]],
-                                      axis=1).astype(np.float32)
+        gt_bboxes_3d_ = torch.tensor(np.concatenate([loc, dims, rots[..., np.newaxis]],
+                                      axis=1).astype(np.float32))
 
         # convert gt_bboxes_3d to velodyne coordinates
-        gt_bboxes_3d = CameraInstance3DBoxes(gt_bboxes_3d).convert_to(
+        gt_bboxes_3d = CameraInstance3DBoxes(gt_bboxes_3d_).convert_to(
             self.box_mode_3d, np.linalg.inv(rect @ Trv2c))
+
+        gt_bboxes_3d.tensor = gt_bboxes_3d_
+
         gt_bboxes = annos['bbox']
 
         selected = self.drop_arrays_by_name(gt_names, ['DontCare'])

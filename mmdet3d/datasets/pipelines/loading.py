@@ -125,7 +125,7 @@ class LoadPointsFromMultiSweeps(object):
 
     def __init__(self,
                  sweeps_num=10,
-                 load_dim=5,
+                 load_dim=4,
                  use_dim=[0, 1, 2, 4],
                  time_dim=4,
                  file_client_args=dict(backend='disk'),
@@ -136,8 +136,8 @@ class LoadPointsFromMultiSweeps(object):
         self.sweeps_num = sweeps_num
         self.use_dim = use_dim
         self.time_dim = time_dim
-        assert time_dim < load_dim, \
-            f'Expect the timestamp dimension < {load_dim}, got {time_dim}'
+        # assert time_dim < load_dim, \
+        #     f'Expect the timestamp dimension < {load_dim}, got {time_dim}'
         self.file_client_args = file_client_args.copy()
         self.file_client = None
         self.pad_empty_sweeps = pad_empty_sweeps
