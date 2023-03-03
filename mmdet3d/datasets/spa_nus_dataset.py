@@ -274,10 +274,14 @@ class SPA_Nus_Dataset(Custom3DDataset):
 
         # the nuscenes box center is [0.5, 0.5, 0.5], we change it to be
         # the same as KITTI (0.5, 0.5, 0)
+        # gt_bboxes_3d = LiDARInstance3DBoxes(
+        #     gt_bboxes_3d,
+        #     box_dim=gt_bboxes_3d.shape[-1],
+        #     origin=(0.5, 0.5, 0.5)).convert_to(self.box_mode_3d)
         gt_bboxes_3d = LiDARInstance3DBoxes(
             gt_bboxes_3d,
             box_dim=gt_bboxes_3d.shape[-1],
-            origin=(0.5, 0.5, 0.5)).convert_to(self.box_mode_3d)
+            origin=(0.5, 0.5, 0)).convert_to(self.box_mode_3d)
 
         anns_results = dict(
             gt_bboxes_3d=gt_bboxes_3d,
@@ -549,9 +553,10 @@ class SPA_Nus_Dataset(Custom3DDataset):
                 _boxes = data_['gt_boxes'][ii]
                 d_['sample_token'] = _token
                 d_['translation'] = _boxes[:3].tolist() 
-                d_['size'] = _boxes[3:6].tolist() 
+                # d_['size'] = _boxes[3:6].tolist() 
                 # if d_['size'][0] <0 or d_['size'][1] <0 or d_['size'][2] <0 :
                 #     import pdb; pdb.set_trace()
+                d_['size'] = [abs(i) for i in _boxes[3:6].tolist()]
                 d_['rotation'] =  list(pyquaternion.Quaternion(axis=[0, 0, 1], radians=_boxes[6]))
                 d_['velocity'] = [0, 0]
                 d_['detection_name'] = cls_label_map[_names]
