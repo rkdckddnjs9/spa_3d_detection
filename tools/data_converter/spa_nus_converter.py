@@ -151,7 +151,7 @@ def get_label_anno(label_path):
     # dimensions will convert hwl format to standard lhw(camera) format.
     annotations['dimensions'] = np.array([[float(info) for info in x[9:12]]
                                           for x in content
-                                          ]).reshape(-1, 3)[:, [2, 1, 0]] #h, w, l -> l ,w, h
+                                          ]).reshape(-1, 3)[:, [1, 2, 0]] #h, l, w -> l ,w, h
     annotations['location'] = np.array([[float(info) for info in x[12:15]]
                                         for x in content]).reshape(-1, 3)
     annotations['rotation_y'] = np.array([float(x[15])
@@ -170,7 +170,7 @@ def box_center_to_corner_3d(centers, dims, angles):
     translation = centers[:, 0:3]
     # h, w, l = dims[:, 0], dims[:, 1], dims[:, 2]
     l, w, h = dims[:, 0], dims[:, 1], dims[:, 2]
-    rotation = angles + np.pi/2
+    rotation = angles
 
     # Create a bounding box outline
     x_corners = np.array([[l_ / 2, l_ / 2, -l_ / 2, -l_ / 2, l_ / 2, l_ / 2, -l_ / 2, -l_ / 2] for l_ in l])
@@ -622,8 +622,6 @@ def _fill_trainval_infos(nusc,
 
 def box_center_to_corner_3d_(box_center):
     # To return
-    corner_boxes = np.zeros((8, 3))
-
     translation = box_center[0:3]
     l, w, h = box_center[3], box_center[4], box_center[5]
     rotation = box_center[6]
@@ -653,66 +651,6 @@ def box_center_to_corner_3d_(box_center):
 
     # return corner_box.transpose()
     return corner_box
-
-def obtain_sensor2top(nusc,
-                      sensor_token,
-                      l2e_t,
-                      l2e_r_mat,
-                      e2g_t,
-                      e2g_r_mat,
-                      sensor_type='lidar'):
-    """Obtain the info with RT matric from general sensor to Top LiDAR.
-
-    Args:
-        nusc (class): Dataset class in the nuScenes dataset.
-        sensor_token (str): Sample data token corresponding to the
-            specific sensor type.
-        l2e_t (np.ndarray): Translation from lidar to ego in shape (1, 3).
-        l2e_r_mat (np.ndarray): Rotation matrix from lidar to ego
-            in shape (3, 3).
-        e2g_t (np.ndarray): Translation from ego to global in shape (1, 3).
-        e2g_r_mat (np.ndarray): Rotation matrix from ego to global
-            in shape (3, 3).
-        sensor_type (str, optional): Sensor to calibrate. Default: 'lidar'.
-
-    Returns:
-        sweep (dict): Sweep information after transformation.
-    """
-    sd_rec = nusc.get('sample_data', sensor_token)
-    cs_record = nusc.get('calibrated_sensor',
-                         sd_rec['calibrated_sensor_token'])
-    pose_record = nusc.get('ego_pose', sd_rec['ego_pose_token'])
-    data_path = str(nusc.get_sample_data_path(sd_rec['token']))
-    if os.getcwd() in data_path:  # path from lyftdataset is absolute path
-        data_path = data_path.split(f'{os.getcwd()}/')[-1]  # relative path
-    sweep = {
-        'data_path': data_path,
-        'type': sensor_type,
-        'sample_data_token': sd_rec['token'],
-        'sensor2ego_translation': cs_record['translation'],
-        'sensor2ego_rotation': cs_record['rotation'],
-        'ego2global_translation': pose_record['translation'],
-        'ego2global_rotation': pose_record['rotation'],
-        'timestamp': sd_rec['timestamp']
-    }
-    l2e_r_s = sweep['sensor2ego_rotation']
-    l2e_t_s = sweep['sensor2ego_translation']
-    e2g_r_s = sweep['ego2global_rotation']
-    e2g_t_s = sweep['ego2global_translation']
-
-    # obtain the RT from sensor to Top LiDAR
-    # sweep->ego->global->ego'->lidar
-    l2e_r_s_mat = Quaternion(l2e_r_s).rotation_matrix
-    e2g_r_s_mat = Quaternion(e2g_r_s).rotation_matrix
-    R = (l2e_r_s_mat.T @ e2g_r_s_mat.T) @ (
-        np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T)
-    T = (l2e_t_s @ e2g_r_s_mat.T + e2g_t_s) @ (
-        np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T)
-    T -= e2g_t @ (np.linalg.inv(e2g_r_mat).T @ np.linalg.inv(l2e_r_mat).T
-                  ) + l2e_t @ np.linalg.inv(l2e_r_mat).T
-    sweep['sensor2lidar_rotation'] = R.T  # points @ R.T + T
-    sweep['sensor2lidar_translation'] = T
-    return sweep
 
 def generate_record_(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
                     sample_data_token: str, filename: str) -> OrderedDict:
